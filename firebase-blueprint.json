@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account for RBAC authentication",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "staff"] },
+        "createdAt": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "name", "username", "password", "role"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Digitization project entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "client": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "name", "client"]
+    },
+    "StaffEntry": {
+      "title": "StaffEntry",
+      "description": "Daily staff operational entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "operationId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "staffName": { "type": "string" },
+        "boxes": { "type": "number" },
+        "files": { "type": "number" },
+        "pages": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "projectId", "operationId", "date", "staffName", "boxes", "files", "pages"]
+    }
+  },
+  "firestore": {
+    "/opstrack_users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users and RBAC authentication credentials"
+    },
+    "/opstrack_projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Projects collection"
+    },
+    "/opstrack_entries/{entryId}": {
+      "schema": { "$ref": "#/entities/StaffEntry" },
+      "description": "Daily staff operation entries"
+    }
+  }
+}

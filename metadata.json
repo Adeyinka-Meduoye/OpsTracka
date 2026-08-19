@@ -1,0 +1,6 @@
+{
+  "name": "OpsTracka",
+  "description": "Digitize project operations and replace WhatsApp daily reports, tracking boxes, files, and pages per staff member across sorting, scanning, repackaging, and custom workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
