@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ActiveTab, User } from '../types';
-import { Sun, Moon, LogOut, Menu, X, Shield, ChevronDown, Cloud, WifiOff } from 'lucide-react';
+import { Sun, Moon, LogOut, Menu, X, ChevronDown, Cloud, WifiOff } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 
 interface NavbarProps {
@@ -49,7 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div>
                 <span className="font-bold text-lg tracking-tight block">OpsTracka</span>
                 <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase block">
-                  {isSuperAdmin ? 'Super Admin Portal' : 'Staff Operations'}
+                  {isSuperAdmin ? 'Super Admin Portal' : 'Team Lead Portal'}
                 </span>
               </div>
             </div>
@@ -169,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                     <div className="text-left">
                       <span className="font-bold text-white block leading-tight">{currentUser.name}</span>
-                      <span className="text-[10px] text-slate-400 block">{isSuperAdmin ? 'Super Admin' : 'Staff Operator'}</span>
+                      <span className="text-[10px] text-slate-400 block">{isSuperAdmin ? 'Super Admin' : 'Team Lead'}</span>
                     </div>
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-1" />
                   </button>
@@ -228,7 +228,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <div>
                     <span className="font-bold text-white block">{currentUser.name}</span>
-                    <span className="text-[10px] text-emerald-400">@{currentUser.username} ({isSuperAdmin ? 'Admin' : 'Staff'})</span>
+                    <span className="text-[10px] text-emerald-400">@{currentUser.username} ({isSuperAdmin ? 'Admin' : 'Team Lead'})</span>
                   </div>
                 </div>
               </div>

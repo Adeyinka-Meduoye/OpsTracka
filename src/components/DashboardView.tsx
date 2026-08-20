@@ -26,9 +26,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedOperationId, setSelectedOperationId] = useState<string>('all');
   const [selectedStaffName, setSelectedStaffName] = useState<string>('all');
-  const [targetDate, setTargetDate] = useState<string>(''); // e.g. '2025-12-23'
+  const [targetDate, setTargetDate] = useState<string>('');
 
-  // Staff list for filter
+  // Staff / Team Lead list for filter
   const staffUsers = users.filter((u) => u.role === 'staff');
 
   // Gather available operations based on selected project
@@ -43,12 +43,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Filter entries
   const filteredEntries = entries.filter((e) => {
-    // Staff confidentiality rule
-    if (isStaff && e.staffName.toLowerCase() !== currentUser.name.toLowerCase()) {
-      return false;
-    }
-
-    // Staff Name filter (for admin)
+    // Staff Name filter (for admin / team lead)
     if (!isStaff && selectedStaffName !== 'all' && e.staffName.toLowerCase() !== selectedStaffName.toLowerCase()) {
       return false;
     }
@@ -63,7 +58,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return false;
     }
 
-    // Specific Date Picker Filter (e.g. December 23, 2025)
+    // Specific Date Picker Filter
     if (targetDate.trim()) {
       if (e.date !== targetDate.trim()) {
         return false;
@@ -177,7 +172,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Staff Operator</th>
+                <th>Team Member / Staff</th>
                 <th>Project</th>
                 <th>Operation</th>
                 <th style="text-align: right;">Boxes</th>
@@ -210,8 +205,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </h1>
           <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
             {isStaff
-              ? `Confidential View for ${currentUser.name}: Showing analytics for your personal contributions.`
-              : 'Real-time performance metrics across all active digitization projects, operations, and staff operators.'}
+              ? `Team Lead View for ${currentUser.name}: Showing analytics for your contributions.`
+              : 'Real-time performance metrics across all active digitization projects, operations, and Team Leads.'}
           </p>
         </div>
 
@@ -240,11 +235,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
             <span>Download CSV ({filteredEntries.length})</span>
           </button>
-          {isStaff && (
-            <span className="text-xs bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-500/30 font-semibold flex items-center">
-              <Shield className="w-3.5 h-3.5 mr-1.5" /> Confidential Mode
-            </span>
-          )}
         </div>
       </div>
 
@@ -254,7 +244,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center space-x-2">
             <Filter className="w-4 h-4 text-emerald-400" />
             <h3 className={`text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-              Advanced Dashboard Filter Controls (Projects, Operations, Staff, Specific Date)
+              Advanced Dashboard Filter Controls (Projects, Operations, Team Lead, Specific Date)
             </h3>
           </div>
           {targetDate && (
@@ -309,18 +299,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </select>
           </div>
 
-          {/* Staff Name Filter */}
+          {/* Team Lead Filter */}
           {!isStaff && (
             <div>
               <label className={`block text-xs font-semibold uppercase mb-1.5 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                Staff Operator Filter
+                Team Lead Filter
               </label>
               <select
                 value={selectedStaffName}
                 onChange={(e) => setSelectedStaffName(e.target.value)}
                 className={`w-full border rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 ${darkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'}`}
               >
-                <option value="all">All Staff Operators</option>
+                <option value="all">All Team Leads</option>
                 {staffUsers.map((su) => (
                   <option key={su.id} value={su.name} className={darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>
                     {su.name} (@{su.username})

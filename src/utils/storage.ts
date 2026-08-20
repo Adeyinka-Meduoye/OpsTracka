@@ -44,7 +44,12 @@ export const getStoredProjects = (): Project[] => {
   try {
     const data = localStorage.getItem(PROJECTS_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      const uniqueMap = new Map<string, Project>();
+      for (const p of parsed) {
+        if (p && p.id) uniqueMap.set(p.id, p);
+      }
+      return Array.from(uniqueMap.values());
     }
   } catch (e) {
     console.error('Failed to load projects from storage', e);
@@ -54,14 +59,23 @@ export const getStoredProjects = (): Project[] => {
 };
 
 export const saveProjects = (projects: Project[]) => {
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  const uniqueMap = new Map<string, Project>();
+  for (const p of projects) {
+    if (p && p.id) uniqueMap.set(p.id, p);
+  }
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(Array.from(uniqueMap.values())));
 };
 
 export const getStoredEntries = (): StaffEntry[] => {
   try {
     const data = localStorage.getItem(ENTRIES_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      const uniqueMap = new Map<string, StaffEntry>();
+      for (const e of parsed) {
+        if (e && e.id) uniqueMap.set(e.id, e);
+      }
+      return Array.from(uniqueMap.values());
     }
   } catch (e) {
     console.error('Failed to load entries from storage', e);
@@ -71,7 +85,11 @@ export const getStoredEntries = (): StaffEntry[] => {
 };
 
 export const saveEntries = (entries: StaffEntry[]) => {
-  localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
+  const uniqueMap = new Map<string, StaffEntry>();
+  for (const e of entries) {
+    if (e && e.id) uniqueMap.set(e.id, e);
+  }
+  localStorage.setItem(ENTRIES_KEY, JSON.stringify(Array.from(uniqueMap.values())));
 };
 
 export const getStoredUsers = (): User[] => {
@@ -79,14 +97,21 @@ export const getStoredUsers = (): User[] => {
     const data = localStorage.getItem(USERS_KEY);
     if (data) {
       const parsed: User[] = JSON.parse(data);
-      const existingUsernames = new Set(parsed.map((u) => u.username.toLowerCase()));
-      const merged = [...parsed];
-      for (const defUser of INITIAL_USERS) {
-        if (!existingUsernames.has(defUser.username.toLowerCase())) {
-          merged.push(defUser);
+      const uniqueMap = new Map<string, User>();
+      for (const u of parsed) {
+        if (u && u.id && u.username) {
+          uniqueMap.set(u.id, u);
         }
       }
-      return merged;
+      for (const defUser of INITIAL_USERS) {
+        const existingByUsername = Array.from(uniqueMap.values()).some(
+          (u) => u.username.toLowerCase() === defUser.username.toLowerCase()
+        );
+        if (!existingByUsername && !uniqueMap.has(defUser.id)) {
+          uniqueMap.set(defUser.id, defUser);
+        }
+      }
+      return Array.from(uniqueMap.values());
     }
   } catch (e) {
     console.error('Failed to load users from storage', e);
@@ -96,7 +121,13 @@ export const getStoredUsers = (): User[] => {
 };
 
 export const saveUsers = (users: User[]) => {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  const uniqueMap = new Map<string, User>();
+  for (const u of users) {
+    if (u && u.id && u.username) {
+      uniqueMap.set(u.id, u);
+    }
+  }
+  localStorage.setItem(USERS_KEY, JSON.stringify(Array.from(uniqueMap.values())));
 };
 
 export const resetToDemoData = () => {

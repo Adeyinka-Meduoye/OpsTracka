@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Project, StaffEntry, User } from '../types';
-import { Plus, Trash2, Edit, Eye, FileSpreadsheet, Package, FileText, BookOpen, ArrowRight, X, Lock, Search } from 'lucide-react';
+import { Plus, Trash2, Edit, Eye, FileSpreadsheet, Package, FileText, BookOpen, ArrowRight, X, Search } from 'lucide-react';
 import { exportEntriesToCSV } from '../utils/exportCsv';
 import { ConfirmationModal } from './ConfirmationModal';
 import { motion, AnimatePresence } from 'motion/react';
@@ -38,8 +38,8 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
   const [operationId, setOperationId] = useState<string>(operations[0]?.id || '');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
-  // Lock staff name to current user's name for both staff and super admin
-  const staffNameVal = currentUser?.name || '';
+  // Staff / Team Member name is now UNLOCKED and fully editable for self or subordinates
+  const [staffName, setStaffName] = useState<string>(currentUser?.name || '');
 
   const [boxes, setBoxes] = useState<string>('');
   const [files, setFiles] = useState<string>('');
@@ -63,14 +63,15 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
         if (draft.files !== undefined) setFiles(draft.files);
         if (draft.pages !== undefined) setPages(draft.pages);
         if (draft.notes !== undefined) setNotes(draft.notes);
+        if (draft.staffName !== undefined) setStaffName(draft.staffName);
       } catch (e) {}
     }
   }, [selectedProjectId]);
 
   useEffect(() => {
-    const draft = { staffName: staffNameVal, boxes, files, pages, notes };
+    const draft = { staffName, boxes, files, pages, notes };
     localStorage.setItem(autoSaveKey, JSON.stringify(draft));
-  }, [staffNameVal, boxes, files, pages, notes, autoSaveKey]);
+  }, [staffName, boxes, files, pages, notes, autoSaveKey]);
 
   const [pendingAction, setPendingAction] = useState<{
     type: 'create' | 'update' | 'delete' | 'view';
@@ -84,14 +85,15 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!staffNameVal || !boxes || !files || !pages) return;
+    const finalStaffName = staffName.trim() || currentUser?.name || 'Team Lead';
+    if (!finalStaffName || !boxes || !files || !pages) return;
 
     const entryData: StaffEntry = {
       id: editingEntryId ? editingEntryId : `entry-${Date.now()}`,
       projectId: selectedProjectId,
       operationId,
       date,
-      staffName: staffNameVal,
+      staffName: finalStaffName,
       boxes: parseInt(boxes) || 0,
       files: parseInt(files) || 0,
       pages: parseInt(pages) || 0,
@@ -102,7 +104,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
     setPendingAction({
       type: editingEntryId ? 'update' : 'create',
       title: editingEntryId ? 'Confirm Entry Update' : 'Confirm Daily Entry Submission',
-      message: `Are you sure you want to ${editingEntryId ? 'update' : 'submit'} this record for ${staffNameVal} (${boxes} boxes, ${files} files, ${pages} pages)?`,
+      message: `Are you sure you want to ${editingEntryId ? 'update' : 'submit'} this record for ${finalStaffName} (${boxes} boxes, ${files} files, ${pages} pages)?`,
       data: entryData,
     });
   };
@@ -135,6 +137,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
     setSelectedProjectId(ent.projectId);
     setOperationId(ent.operationId);
     setDate(ent.date);
+    setStaffName(ent.staffName);
     setBoxes(ent.boxes.toString());
     setFiles(ent.files.toString());
     setPages(ent.pages.toString());
@@ -144,10 +147,6 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
 
   const projectEntries = entries.filter((e) => {
     if (e.projectId !== selectedProjectId) return false;
-    // Staff confidentiality rule: Staff can only see their own entries. Super admin can see all project entries.
-    if (currentUser?.role === 'staff') {
-      if (e.staffName.toLowerCase() !== currentUser.name.toLowerCase()) return false;
-    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchesStaff = e.staffName.toLowerCase().includes(q);
@@ -168,12 +167,12 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
         <div>
           <h1 className={`text-2xl font-bold flex items-center ${darkMode ? 'text-white' : 'text-slate-900'}`}>
             <Package className="w-7 h-7 text-emerald-400 mr-3" />
-            Digitization Daily Operations & Staff Log
+            Digitization Daily Operations & Team Lead Log
           </h1>
           <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
             {currentUser?.role === 'staff'
-              ? 'Confidential Mode: You are viewing and recording only your personal shift submissions.'
-              : `Welcome ${currentUser?.name} (Super Admin): Recording operational boxes, files, and pages with locked staff attribution.`}
+              ? 'Team Lead Mode: Freely record operational throughput and submissions for yourself or your team subordinates.'
+              : `Welcome ${currentUser?.name} (Super Admin): Recording operational boxes, files, and pages.`}
           </p>
         </div>
 
@@ -294,15 +293,16 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
 
           <div>
             <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 flex items-center justify-between ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-              <span>Staff Name (Locked)</span>
-              <span className="text-[10px] text-emerald-400 flex items-center"><Lock className="w-3 h-3 mr-1" /> Auto-Locked</span>
+              <span>Staff / Team Member Name (Editable)</span>
+              <span className="text-[10px] text-emerald-400 font-medium">Type any name freely</span>
             </label>
             <input
               type="text"
               required
-              readOnly
-              value={staffNameVal}
-              className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none ${darkMode ? 'bg-slate-950 border-slate-800 text-emerald-400 font-bold' : 'bg-slate-100 border-slate-300 text-emerald-600 font-bold'} opacity-90 cursor-not-allowed`}
+              value={staffName}
+              onChange={(e) => setStaffName(e.target.value)}
+              placeholder="Enter staff or subordinate name"
+              className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${darkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'}`}
             />
           </div>
 
@@ -371,7 +371,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
       <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'} border rounded-3xl p-6 space-y-4`}>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-            {currentUser?.role === 'staff' ? 'Your Confidential Shift Logs' : `Recorded Logs for ${currentProject?.name}`} ({projectEntries.length})
+            Recorded Logs for {currentProject?.name} ({projectEntries.length})
           </h3>
 
           {/* Search Input for Record Management */}
@@ -405,7 +405,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
               {projectEntries.length === 0 ? (
                 <tr>
                   <td colSpan={8} className={`text-center py-8 ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                    {searchQuery ? 'No entries match your search query.' : (currentUser?.role === 'staff' ? 'You have no recorded submissions for this project yet.' : 'No entries recorded yet for this project.')}
+                    {searchQuery ? 'No entries match your search query.' : 'No entries recorded yet for this project.'}
                   </td>
                 </tr>
               ) : (

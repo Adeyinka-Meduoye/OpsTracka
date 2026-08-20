@@ -61,7 +61,6 @@ export default function App() {
       const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache TTL
 
       if (lastSync && now - parseInt(lastSync, 10) < CACHE_TTL_MS) {
-        // Skip Firestore reads to drastically reduce read quota usage
         setSyncStatus('synced');
         return;
       }
@@ -69,26 +68,47 @@ export default function App() {
       try {
         const cloudProjects = await fetchProjectsFromFirestore();
         if (cloudProjects && cloudProjects.length > 0) {
-          setProjects(cloudProjects);
-          saveProjects(cloudProjects);
+          const projMap = new Map<string, Project>();
+          for (const p of cloudProjects) {
+            if (p && p.id) projMap.set(p.id, p);
+          }
+          const mergedProj = Array.from(projMap.values());
+          setProjects(mergedProj);
+          saveProjects(mergedProj);
         }
+
         const cloudEntries = await fetchEntriesFromFirestore();
         if (cloudEntries && cloudEntries.length > 0) {
-          setEntries(cloudEntries);
-          saveEntries(cloudEntries);
+          const entryMap = new Map<string, StaffEntry>();
+          for (const e of cloudEntries) {
+            if (e && e.id) entryMap.set(e.id, e);
+          }
+          const mergedEntries = Array.from(entryMap.values());
+          setEntries(mergedEntries);
+          saveEntries(mergedEntries);
         }
+
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && cloudUsers.length > 0) {
           const localUsers = getStoredUsers();
-          const existingUsernames = new Set(cloudUsers.map((u) => u.username.toLowerCase()));
-          const merged = [...cloudUsers];
-          for (const u of localUsers) {
-            if (!existingUsernames.has(u.username.toLowerCase())) {
-              merged.push(u);
+          const userMap = new Map<string, User>();
+          
+          for (const u of cloudUsers) {
+            if (u && u.id && u.username) {
+              userMap.set(u.id, u);
             }
           }
-          setUsers(merged);
-          saveUsers(merged);
+          for (const u of localUsers) {
+            const hasUsername = Array.from(userMap.values()).some(
+              (existing) => existing.username.toLowerCase() === u.username.toLowerCase()
+            );
+            if (!userMap.has(u.id) && !hasUsername) {
+              userMap.set(u.id, u);
+            }
+          }
+          const mergedUsers = Array.from(userMap.values());
+          setUsers(mergedUsers);
+          saveUsers(mergedUsers);
         }
         localStorage.setItem('opstrack_last_sync_time', Date.now().toString());
         setSyncStatus('synced');

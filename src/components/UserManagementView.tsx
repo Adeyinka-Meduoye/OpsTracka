@@ -46,7 +46,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     const all = uppercase + lowercase + numbers + symbols;
 
     let pwd = '';
-    // Ensure at least one of each
     pwd += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
     pwd += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
     pwd += numbers.charAt(Math.floor(Math.random() * numbers.length));
@@ -55,7 +54,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     for (let i = 4; i < 12; i++) {
       pwd += all.charAt(Math.floor(Math.random() * all.length));
     }
-    // Shuffle
     pwd = pwd.split('').sort(() => 0.5 - Math.random()).join('');
     setPassword(pwd);
   };
@@ -132,7 +130,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             User Access & RBAC Management
           </h1>
           <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-            Super Admin control: Auto-generate secure credentials, copy passwords, toggle visibility, and manage staff access.
+            Super Admin control: Auto-generate secure credentials, copy passwords, toggle visibility, and manage Team Lead access.
           </p>
         </div>
         <button
@@ -184,7 +182,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                           {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                         <button
-                          onClick={() => copyPasswordToClipboard(u.id, u.password)}
+                          onClick={() => copyPasswordToClipboard(u.id, u.password || '')}
                           className={`p-1 rounded-lg transition-colors ${darkMode ? 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800' : 'text-slate-600 hover:text-emerald-600 hover:bg-slate-100'}`}
                           title="Copy Password"
                         >
@@ -200,7 +198,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                             : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                         }`}
                       >
-                        {u.role === 'super_admin' ? 'Super Admin' : 'Staff Operator'}
+                        {u.role === 'super_admin' ? 'Super Admin' : 'Team Lead'}
                       </span>
                     </td>
                     <td className={`px-4 py-3.5 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>{u.createdAt}</td>
@@ -326,7 +324,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   onChange={(e) => setRole(e.target.value as any)}
                   className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${darkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'}`}
                 >
-                  <option value="staff" className={darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>Staff / Data Entry Operator</option>
+                  <option value="staff" className={darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>Team Lead</option>
                   <option value="super_admin" className={darkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>Super Administrator</option>
                 </select>
               </div>
@@ -379,7 +377,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   </span>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(viewingUser.password);
+                      navigator.clipboard.writeText(viewingUser.password || '');
                       alert('Password copied to clipboard!');
                     }}
                     className="p-1 text-emerald-400 hover:text-emerald-300"
@@ -391,7 +389,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className={darkMode ? 'text-slate-400' : 'text-slate-600'}>Role:</span>
-                <span className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{viewingUser.role}</span>
+                <span className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{viewingUser.role === 'super_admin' ? 'Super Administrator' : 'Team Lead'}</span>
               </div>
             </div>
             <div className="mt-6 flex justify-end">
