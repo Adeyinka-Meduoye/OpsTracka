@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, X, Smartphone, Monitor, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, X, Smartphone } from 'lucide-react';
 
 export const PwaBanner: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -32,11 +32,11 @@ export const PwaBanner: React.FC = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // ALWAYS register Service Worker & check for updates (even if standalone, so installed PWAs receive update prompts!)
+    // Register Service Worker & check for updates safely
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then((reg) => {
-        // Check for updates on load & periodic updates
-        reg.update();
+        // Safely check for updates without throwing unhandled rejection on network/cache miss
+        reg.update().catch(() => {});
 
         // Check if there is already a waiting worker (an update ready to install)
         if (reg.waiting) {
@@ -87,13 +87,10 @@ export const PwaBanner: React.FC = () => {
         console.log('Install prompt error:', err);
       }
     } else {
-      // If deferredPrompt is not yet captured by browser event, try to trigger native prompt or dispatch event
-      if ((window as any).BeforeInstallPromptEvent) {
-        console.log('Waiting for install prompt event...');
-      } else {
-        // Try to trigger browser installation if available
-        console.log('Install prompt not yet ready.');
-      }
+      // Browser hasn't fired beforeinstallprompt yet (common on desktop/Chrome)
+      alert(
+        'To install OpsTracka on your desktop browser:\n\n1. Look at the right side of your browser address bar / URL bar.\n2. Click the Install icon (🖥️ with an arrow or ⊕ sign), OR\n3. Click the browser menu (⋮ or •••) in the top-right corner and select "Install OpsTracka...".'
+      );
     }
   };
 
@@ -166,4 +163,5 @@ export const PwaBanner: React.FC = () => {
     </div>
   );
 };
+
 
