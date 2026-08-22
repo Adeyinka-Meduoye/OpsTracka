@@ -36,8 +36,18 @@ export default function App() {
   const [entries, setEntries] = useState<StaffEntry[]>(getStoredEntries());
   const [users, setUsers] = useState<User[]>(getStoredUsers());
 
-  // Current logged in user (null by default requiring login)
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Current logged in user persisted in localStorage
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('opstrack_current_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('daily-entry');
   const [selectedProjectIdForEntry, setSelectedProjectIdForEntry] = useState<string | undefined>(
@@ -52,6 +62,30 @@ export default function App() {
 
   // About Modal state
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
+
+  // Back button handling for PWA/Browser to prevent accidental app exit
+  useEffect(() => {
+    window.history.pushState({ tab: activeTab }, '');
+
+    const handlePopState = () => {
+      if (isAboutOpen) {
+        setIsAboutOpen(false);
+        window.history.pushState({ tab: activeTab }, '');
+        return;
+      }
+      if (activeTab !== 'daily-entry') {
+        setActiveTab('daily-entry');
+        window.history.pushState({ tab: 'daily-entry' }, '');
+        return;
+      }
+      window.history.pushState({ tab: 'daily-entry' }, '');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [activeTab, isAboutOpen]);
 
   // Sync with Firestore on mount (with 30-minute TTL caching to drastically reduce Firestore read quota)
   useEffect(() => {
@@ -239,6 +273,7 @@ export default function App() {
           users={users}
           onLogin={(user) => {
             setCurrentUser(user);
+            localStorage.setItem('opstrack_current_user', JSON.stringify(user));
             setActiveTab('daily-entry');
           }}
           darkMode={darkMode}
@@ -261,7 +296,10 @@ export default function App() {
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         currentUser={currentUser}
-        onLogout={() => setCurrentUser(null)}
+        onLogout={() => {
+          setCurrentUser(null);
+          localStorage.removeItem('opstrack_current_user');
+        }}
         syncStatus={syncStatus}
       />
 
