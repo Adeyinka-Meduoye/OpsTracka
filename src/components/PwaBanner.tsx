@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw, X, Smartphone } from 'lucide-react';
 
+// Global listener for beforeinstallprompt so we never miss it before React mounts
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e: Event) => {
+    e.preventDefault();
+    (window as any).__deferredPrompt = e;
+  });
+}
+
 export const PwaBanner: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(
     typeof window !== 'undefined' ? (window as any).__deferredPrompt : null
@@ -21,7 +29,7 @@ export const PwaBanner: React.FC = () => {
     if (!standalone && sessionStorage.getItem('pwa_install_dismissed') !== 'true') {
       const timer = setTimeout(() => {
         setShowInstallBanner(true);
-      }, 1000);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -62,10 +70,10 @@ export const PwaBanner: React.FC = () => {
           }
         };
 
-        // Periodically check for updates every 15 minutes
+        // Periodically check for updates every 10 minutes
         const updateInterval = setInterval(() => {
           reg.update().catch(() => {});
-        }, 15 * 60 * 1000);
+        }, 10 * 60 * 1000);
 
         return () => clearInterval(updateInterval);
       }).catch((err) => {
@@ -126,12 +134,6 @@ export const PwaBanner: React.FC = () => {
       if (isIOS) {
         alert("To install OpsTracka on iOS Safari:\n\n1. Tap the Share button at the bottom of your screen.\n2. Scroll down and select 'Add to Home Screen'.");
       } else {
-        // Trigger browser update/prompt check
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistration().then((reg) => {
-            if (reg) reg.update();
-          });
-        }
         alert("To install OpsTracka on your browser:\n\nClick the install icon in your address bar or browser menu (⋮ / •••) and select 'Install OpsTracka'.");
       }
     }
@@ -212,8 +214,3 @@ export const PwaBanner: React.FC = () => {
     </div>
   );
 };
-
-
-
-
-
