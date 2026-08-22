@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { RefreshCw, X, Smartphone } from 'lucide-react';
 
 export const PwaBanner: React.FC = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(
+    typeof window !== 'undefined' ? (window as any).__deferredPrompt : null
+  );
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -16,7 +18,7 @@ export const PwaBanner: React.FC = () => {
     if (!standalone) {
       const timer = setTimeout(() => {
         setShowInstallBanner(true);
-      }, 1500);
+      }, 1000);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -25,6 +27,7 @@ export const PwaBanner: React.FC = () => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).__deferredPrompt = e;
       if (!isStandalone) {
         setShowInstallBanner(true);
       }
@@ -32,13 +35,18 @@ export const PwaBanner: React.FC = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Register Service Worker & check for updates safely
+    // Check for global captured prompt if already fired
+    if ((window as any).__deferredPrompt) {
+      setDeferredPrompt((window as any).__deferredPrompt);
+    }
+
+    // Register Service Worker & robust update checks for installed PWA devices
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then((reg) => {
-        // Safely check for updates without throwing unhandled rejection on network/cache miss
+        // Check for updates immediately
         reg.update().catch(() => {});
 
-        // Check if there is already a waiting worker (an update ready to install)
+        // Check waiting worker on startup
         if (reg.waiting) {
           setUpdateAvailable(true);
         }
@@ -47,19 +55,39 @@ export const PwaBanner: React.FC = () => {
           const installingWorker = reg.installing;
           if (installingWorker) {
             installingWorker.onstatechange = () => {
-              if (installingWorker.state === 'installed') {
-                if (navigator.serviceWorker.controller) {
-                  setUpdateAvailable(true);
-                }
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                setUpdateAvailable(true);
               }
             };
           }
         };
+
+        // Periodically check for updates every 15 minutes
+        const updateInterval = setInterval(() => {
+          reg.update().catch(() => {});
+        }, 15 * 60 * 1000);
+
+        return () => clearInterval(updateInterval);
       }).catch((err) => {
         console.log('SW registration failed: ', err);
       });
 
-      // Listen for controller change (automatic reload when user clicks update)
+      // Also check for updates when app window comes back into focus
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && 'serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration().then((reg) => {
+            if (reg) {
+              reg.update().catch(() => {});
+              if (reg.waiting) {
+                setUpdateAvailable(true);
+              }
+            }
+          });
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
       let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!refreshing) {
@@ -67,6 +95,10 @@ export const PwaBanner: React.FC = () => {
           window.location.reload();
         }
       });
+
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     }
 
     return () => {
@@ -75,22 +107,38 @@ export const PwaBanner: React.FC = () => {
   }, [isStandalone]);
 
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
+    const promptEvent = deferredPrompt || (window as any).__deferredPrompt;
+    if (promptEvent) {
       try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
+        promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
         if (outcome === 'accepted') {
           setShowInstallBanner(false);
         }
         setDeferredPrompt(null);
+        (window as any).__deferredPrompt = null;
       } catch (err) {
         console.log('Install prompt error:', err);
       }
     } else {
-      // Browser hasn't fired beforeinstallprompt yet (common on desktop/Chrome)
-      alert(
-        'To install OpsTracka on your desktop browser:\n\n1. Look at the right side of your browser address bar / URL bar.\n2. Click the Install icon (🖥️ with an arrow or ⊕ sign), OR\n3. Click the browser menu (⋮ or •••) in the top-right corner and select "Install OpsTracka...".'
-      );
+      // If prompt event not yet fired by browser, trigger browser installation prompt directly if possible or notify
+      if ('serviceWorker' in navigator && (navigator as any).getInstalledRelatedApps) {
+        try {
+          const apps = await (navigator as any).getInstalledRelatedApps();
+          if (apps.length > 0) {
+            setShowInstallBanner(false);
+            return;
+          }
+        } catch (e) {}
+      }
+      // Re-trigger service worker update check or dispatch custom event to encourage prompt
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then((reg) => {
+          if (reg) reg.update();
+        });
+      }
+      // Notify user smoothly to use browser menu if deferredPrompt is not yet ready
+      console.log('Install prompt is preparing. Please click again in a moment.');
     }
   };
 
@@ -163,5 +211,7 @@ export const PwaBanner: React.FC = () => {
     </div>
   );
 };
+
+
 
 
