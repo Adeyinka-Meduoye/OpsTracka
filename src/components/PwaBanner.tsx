@@ -1,543 +1,219 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, X, Smartphone, Share } from 'lucide-react';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed';
-    platform: string;
-  }>;
-}
+import { RefreshCw, X, Smartphone } from 'lucide-react';
 
 export const PwaBanner: React.FC = () => {
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
-
-  const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
-  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
-
-  // =========================================================
-  // CHECK INSTALLATION STATUS
-  // =========================================================
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(
+    typeof window !== 'undefined' ? (window as any).__deferredPrompt : null
+  );
+  const [showInstallBanner, setShowInstallBanner] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('pwa_install_dismissed') !== 'true';
+  });
+  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
   useEffect(() => {
-    const checkStandalone = () => {
-      const standalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (navigator as any).standalone === true;
+    // Check if already installed in standalone mode
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    setIsStandalone(!!standalone);
 
-      setIsStandalone(standalone);
-
-      return standalone;
-    };
-
-    const standalone = checkStandalone();
-
-    // Already installed → don't show install banner
-    if (standalone) {
-      setShowInstallBanner(false);
-      return;
+    // Show install banner if not standalone and not dismissed this session
+    if (!standalone && sessionStorage.getItem('pwa_install_dismissed') !== 'true') {
+      const timer = setTimeout(() => {
+        setShowInstallBanner(true);
+      }, 1000);
+      return () => clearTimeout(timer);
     }
-
-    // Not installed → show custom install banner
-    const timer = setTimeout(() => {
-      setShowInstallBanner(true);
-    }, 1000);
-
-    return () => clearTimeout(timer);
   }, []);
 
-  // =========================================================
-  // INSTALL PROMPT + SERVICE WORKER
-  // =========================================================
-
   useEffect(() => {
-    // -------------------------------------------------------
-    // Native browser installation prompt
-    // -------------------------------------------------------
-
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-
-      const installEvent = event as BeforeInstallPromptEvent;
-
-      setDeferredPrompt(installEvent);
-
-      // Store globally in case another component needs it
-      (window as any).__deferredPrompt = installEvent;
-
-      const standalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (navigator as any).standalone === true;
-
-      if (!standalone) {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      (window as any).__deferredPrompt = e;
+      if (!isStandalone && sessionStorage.getItem('pwa_install_dismissed') !== 'true') {
         setShowInstallBanner(true);
       }
     };
 
-    window.addEventListener(
-      'beforeinstallprompt',
-      handleBeforeInstallPrompt
-    );
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Check if prompt was captured before this component mounted
-    const existingPrompt = (window as any).__deferredPrompt;
-
-    if (existingPrompt) {
-      setDeferredPrompt(existingPrompt);
+    if ((window as any).__deferredPrompt) {
+      setDeferredPrompt((window as any).__deferredPrompt);
     }
 
-    // =======================================================
-    // SERVICE WORKER
-    // =======================================================
+    // Register Service Worker & robust update checks for installed PWA devices
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        reg.update().catch(() => {});
 
-    let updateInterval: ReturnType<typeof setInterval> | null = null;
-
-    const registerServiceWorker = async () => {
-      if (!('serviceWorker' in navigator)) {
-        console.log('[PWA] Service Worker is not supported.');
-        return;
-      }
-
-      try {
-        const registration = await navigator.serviceWorker.register(
-          '/sw.js'
-        );
-
-        console.log(
-          '[PWA] Service Worker registered:',
-          registration.scope
-        );
-
-        // ---------------------------------------------------
-        // Check immediately for updates
-        // ---------------------------------------------------
-
-        await registration.update();
-
-        // ---------------------------------------------------
-        // Check if an update is already waiting
-        // ---------------------------------------------------
-
-        if (registration.waiting) {
-          console.log('[PWA] Update already waiting.');
+        if (reg.waiting) {
           setUpdateAvailable(true);
         }
 
-        // ---------------------------------------------------
-        // Detect newly installed Service Worker
-        // ---------------------------------------------------
-
-        registration.addEventListener('updatefound', () => {
-          const installingWorker = registration.installing;
-
-          if (!installingWorker) {
-            return;
+        reg.onupdatefound = () => {
+          const installingWorker = reg.installing;
+          if (installingWorker) {
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                setUpdateAvailable(true);
+              }
+            };
           }
+        };
 
-          console.log('[PWA] New Service Worker found.');
+        // Periodically check for updates every 15 minutes
+        const updateInterval = setInterval(() => {
+          reg.update().catch(() => {});
+        }, 15 * 60 * 1000);
 
-          installingWorker.addEventListener('statechange', () => {
-            console.log(
-              '[PWA] Service Worker state:',
-              installingWorker.state
-            );
+        return () => clearInterval(updateInterval);
+      }).catch((err) => {
+        console.log('SW registration failed: ', err);
+      });
 
-            if (
-              installingWorker.state === 'installed' &&
-              navigator.serviceWorker.controller
-            ) {
-              console.log('[PWA] New app update available.');
-
-              setUpdateAvailable(true);
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && 'serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration().then((reg) => {
+            if (reg) {
+              reg.update().catch(() => {});
+              if (reg.waiting) {
+                setUpdateAvailable(true);
+              }
             }
           });
-        });
+        }
+      };
 
-        // ---------------------------------------------------
-        // Periodic update check
-        // ---------------------------------------------------
+      document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        updateInterval = setInterval(() => {
-          registration.update().catch(() => {});
-        }, 15 * 60 * 1000);
-      } catch (error) {
-        console.error(
-          '[PWA] Service Worker registration failed:',
-          error
-        );
-      }
-    };
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
 
-    registerServiceWorker();
-
-    // =======================================================
-    // CHECK FOR UPDATE WHEN APP RETURNS TO FOREGROUND
-    // =======================================================
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') {
-        return;
-      }
-
-      navigator.serviceWorker
-        ?.getRegistration()
-        .then((registration) => {
-          if (!registration) {
-            return;
-          }
-
-          registration.update().catch(() => {});
-
-          if (registration.waiting) {
-            console.log(
-              '[PWA] Waiting Service Worker detected.'
-            );
-
-            setUpdateAvailable(true);
-          }
-        });
-    };
-
-    document.addEventListener(
-      'visibilitychange',
-      handleVisibilityChange
-    );
-
-    // =======================================================
-    // RELOAD AFTER SERVICE WORKER ACTIVATION
-    // =======================================================
-
-    let refreshing = false;
-
-    const handleControllerChange = () => {
-      if (refreshing) {
-        return;
-      }
-
-      refreshing = true;
-
-      console.log(
-        '[PWA] New Service Worker activated. Reloading app...'
-      );
-
-      window.location.reload();
-    };
-
-    navigator.serviceWorker?.addEventListener(
-      'controllerchange',
-      handleControllerChange
-    );
-
-    // =======================================================
-    // CLEANUP
-    // =======================================================
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
 
     return () => {
-      window.removeEventListener(
-        'beforeinstallprompt',
-        handleBeforeInstallPrompt
-      );
-
-      document.removeEventListener(
-        'visibilitychange',
-        handleVisibilityChange
-      );
-
-      navigator.serviceWorker?.removeEventListener(
-        'controllerchange',
-        handleControllerChange
-      );
-
-      if (updateInterval) {
-        clearInterval(updateInterval);
-      }
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, []);
-
-  // =========================================================
-  // DEVICE DETECTION
-  // =========================================================
-
-  const isIOS =
-    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-    !(window as any).MSStream;
-
-  // =========================================================
-  // INSTALL APP
-  // =========================================================
+  }, [isStandalone]);
 
   const handleInstallClick = async () => {
-    const promptEvent =
-      deferredPrompt || (window as any).__deferredPrompt;
-
-    // -------------------------------------------------------
-    // Chrome / Edge / supported browsers
-    // -------------------------------------------------------
-
+    const promptEvent = deferredPrompt || (window as any).__deferredPrompt;
     if (promptEvent) {
       try {
-        await promptEvent.prompt();
-
+        promptEvent.prompt();
         const { outcome } = await promptEvent.userChoice;
-
-        console.log('[PWA] Installation result:', outcome);
-
         if (outcome === 'accepted') {
           setShowInstallBanner(false);
+          sessionStorage.setItem('pwa_install_dismissed', 'true');
         }
-
         setDeferredPrompt(null);
         (window as any).__deferredPrompt = null;
-      } catch (error) {
-        console.error(
-          '[PWA] Installation prompt failed:',
-          error
-        );
+      } catch (err) {
+        console.log('Install prompt error:', err);
       }
-
-      return;
+    } else {
+      // Check if iOS / Safari where beforeinstallprompt is not supported
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      if (isIOS) {
+        alert("To install OpsTracka on iOS Safari:\n\n1. Tap the Share button at the bottom of your screen.\n2. Scroll down and select 'Add to Home Screen'.");
+      } else {
+        // Trigger browser update/prompt check
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration().then((reg) => {
+            if (reg) reg.update();
+          });
+        }
+        alert("To install OpsTracka on your browser:\n\nClick the install icon in your address bar or browser menu (⋮ / •••) and select 'Install OpsTracka'.");
+      }
     }
-
-    // -------------------------------------------------------
-    // iOS Safari
-    // -------------------------------------------------------
-
-    if (isIOS) {
-      setShowIOSInstructions(true);
-      return;
-    }
-
-    // -------------------------------------------------------
-    // Browsers without beforeinstallprompt
-    // -------------------------------------------------------
-
-    alert(
-      'To install OpsTracka, open your browser menu and select "Install App" or "Add to Home Screen".'
-    );
   };
 
-  // =========================================================
-  // UPDATE APP
-  // =========================================================
-
-  const handleUpdateClick = async () => {
-    if (!('serviceWorker' in navigator)) {
-      window.location.reload();
-      return;
-    }
-
-    try {
-      const registration =
-        await navigator.serviceWorker.getRegistration();
-
-      if (registration?.waiting) {
-        console.log(
-          '[PWA] Activating waiting Service Worker...'
-        );
-
-        registration.waiting.postMessage({
-          type: 'SKIP_WAITING',
-        });
-
-        // The controllerchange event above will reload
-        // the application automatically.
-
-        return;
-      }
-
-      // -----------------------------------------------------
-      // Fallback: force an update check
-      // -----------------------------------------------------
-
-      console.log(
-        '[PWA] No waiting worker found. Checking for update...'
-      );
-
-      await registration?.update();
-
-      window.location.reload();
-    } catch (error) {
-      console.error('[PWA] Update failed:', error);
-
+  const handleUpdateClick = () => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg && reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+        window.location.reload();
+      });
+    } else {
       window.location.reload();
     }
   };
 
-  // =========================================================
-  // NOTHING TO SHOW
-  // =========================================================
+  const handleDismissInstall = () => {
+    setShowInstallBanner(false);
+    sessionStorage.setItem('pwa_install_dismissed', 'true');
+  };
 
-  // Installed app + no update
-  if (isStandalone && !updateAvailable) {
-    return null;
-  }
-
-  // Neither install nor update banner is active
-  if (!showInstallBanner && !updateAvailable) {
-    return null;
-  }
-
-  // =========================================================
-  // RENDER
-  // =========================================================
+  // If update is available, ALWAYS show banner regardless of standalone status or session dismissal.
+  // If already installed and no update, return null.
+  if (isStandalone && !updateAvailable) return null;
+  if (!updateAvailable && (!showInstallBanner || sessionStorage.getItem('pwa_install_dismissed') === 'true')) return null;
 
   return (
-    <>
-      {/* =====================================================
-          MAIN PWA BANNER
-      ====================================================== */}
-
-      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-50 bg-slate-900 border border-slate-800 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 animate-bounce-in">
-
-        {/* ===================================================
-            UPDATE BANNER
-        ==================================================== */}
-
-        {updateAvailable ? (
-          <>
-            <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                <RefreshCw className="w-5 h-5" />
-              </div>
-
-              <div className="min-w-0">
-                <h4 className="font-bold text-sm">
-                  Update OpsTracka
-                </h4>
-
-                <p className="text-xs text-slate-400">
-                  A new version of OpsTracka is available.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleUpdateClick}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow transition-colors shrink-0"
-            >
-              Update App
-            </button>
-          </>
-        ) : (
-
-          /* =================================================
-             INSTALL BANNER
-          ================================================== */
-
-          <>
-            <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                <Smartphone className="w-5 h-5" />
-              </div>
-
-              <div className="min-w-0">
-                <h4 className="font-bold text-sm">
-                  Install OpsTracka
-                </h4>
-
-                <p className="text-xs text-slate-400">
-                  Install the app for faster access and offline support.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2 shrink-0">
-              <button
-                onClick={handleInstallClick}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow transition-colors"
-              >
-                Install App
-              </button>
-
-              <button
-                onClick={() => setShowInstallBanner(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
-                aria-label="Close install banner"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* =====================================================
-          IOS INSTALLATION INSTRUCTIONS
-      ====================================================== */}
-
-      {showIOSInstructions && (
-        <div className="fixed inset-0 z-[60] bg-black/60 flex items-end sm:items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 text-white rounded-2xl p-6 shadow-2xl border border-slate-800">
-
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h3 className="font-bold text-lg">
-                  Install OpsTracka
-                </h3>
-
-                <p className="text-sm text-slate-400">
-                  Add OpsTracka to your iPhone or iPad.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowIOSInstructions(false)}
-                className="text-slate-400 hover:text-white"
-                aria-label="Close instructions"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-sm text-slate-300">
-
-              <div className="flex gap-3">
-                <span className="font-bold text-emerald-400">
-                  1.
-                </span>
-
-                <p>
-                  Tap the{' '}
-                  <Share className="inline w-4 h-4" />{' '}
-                  <strong>Share</strong> button in Safari.
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <span className="font-bold text-emerald-400">
-                  2.
-                </span>
-
-                <p>
-                  Scroll down and select{' '}
-                  <strong>Add to Home Screen</strong>.
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <span className="font-bold text-emerald-400">
-                  3.
-                </span>
-
-                <p>
-                  Tap <strong>Add</strong>.
-                </p>
-              </div>
-
-            </div>
-
-            <button
-              onClick={() => setShowIOSInstructions(false)}
-              className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl"
-            >
-              Got It
-            </button>
+    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-50 bg-slate-900 border border-slate-800 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 animate-bounce-in">
+      {updateAvailable ? (
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <RefreshCw className="w-5 h-5 animate-spin" />
+          </div>
+          <div>
+            <h4 className="font-bold text-sm">App Update Available</h4>
+            <p className="text-xs text-slate-400">A new version of OpsTracka is ready.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <Smartphone className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="font-bold text-sm">Install OpsTracka App</h4>
+            <p className="text-xs text-slate-400">Install PWA for fast offline access & daily reports.</p>
           </div>
         </div>
       )}
-    </>
+
+      <div className="flex items-center space-x-2 shrink-0">
+        {updateAvailable ? (
+          <button
+            onClick={handleUpdateClick}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow transition-colors"
+          >
+            Update App
+          </button>
+        ) : (
+          <button
+            onClick={handleInstallClick}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow transition-colors"
+          >
+            Install App
+          </button>
+        )}
+        {!updateAvailable && (
+          <button
+            onClick={handleDismissInstall}
+            className="text-slate-400 hover:text-white p-1 rounded-lg"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 };
+
+
+
+
+
