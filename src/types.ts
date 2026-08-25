@@ -5,12 +5,20 @@ export interface Operation {
   order: number;
 }
 
+export interface CustomField {
+  id: string;
+  label: string;
+  type: 'text' | 'number';
+  required?: boolean;
+}
+
 export interface Project {
   id: string;
   name: string;
   client: string;
   description: string;
   operations: Operation[];
+  customFields?: CustomField[];
   createdAt: string;
 }
 
@@ -24,6 +32,7 @@ export interface StaffEntry {
   files: number;
   pages: number;
   notes?: string;
+  customFieldValues?: Record<string, string | number>;
   createdAt: string;
 }
 

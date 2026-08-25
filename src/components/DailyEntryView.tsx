@@ -45,6 +45,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
   const [files, setFiles] = useState<string>('');
   const [pages, setPages] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | number>>({});
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
@@ -55,6 +56,15 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
     if (operations.length > 0 && !operations.some((o) => o.id === operationId)) {
       setOperationId(operations[0].id);
     }
+    // Reset or load custom field values for current project
+    const initialCfVals: Record<string, string | number> = {};
+    if (currentProject?.customFields) {
+      for (const cf of currentProject.customFields) {
+        initialCfVals[cf.id] = '';
+      }
+    }
+    setCustomFieldValues(initialCfVals);
+
     const savedDraft = localStorage.getItem(autoSaveKey);
     if (savedDraft) {
       try {
@@ -64,14 +74,15 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
         if (draft.pages !== undefined) setPages(draft.pages);
         if (draft.notes !== undefined) setNotes(draft.notes);
         if (draft.staffName !== undefined) setStaffName(draft.staffName);
+        if (draft.customFieldValues !== undefined) setCustomFieldValues(draft.customFieldValues);
       } catch (e) {}
     }
   }, [selectedProjectId]);
 
   useEffect(() => {
-    const draft = { staffName, boxes, files, pages, notes };
+    const draft = { staffName, boxes, files, pages, notes, customFieldValues };
     localStorage.setItem(autoSaveKey, JSON.stringify(draft));
-  }, [staffName, boxes, files, pages, notes, autoSaveKey]);
+  }, [staffName, boxes, files, pages, notes, customFieldValues, autoSaveKey]);
 
   const [pendingAction, setPendingAction] = useState<{
     type: 'create' | 'update' | 'delete' | 'view';
@@ -98,6 +109,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
       files: parseInt(files) || 0,
       pages: parseInt(pages) || 0,
       notes: notes.trim(),
+      customFieldValues,
       createdAt: new Date().toISOString(),
     };
 
@@ -119,6 +131,11 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
       setFiles('');
       setPages('');
       setNotes('');
+      const resetCf: Record<string, string | number> = {};
+      if (currentProject?.customFields) {
+        for (const cf of currentProject.customFields) resetCf[cf.id] = '';
+      }
+      setCustomFieldValues(resetCf);
     } else if (pendingAction.type === 'update') {
       onUpdateEntry(pendingAction.data);
       setEditingEntryId(null);
@@ -126,6 +143,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
       setFiles('');
       setPages('');
       setNotes('');
+      setCustomFieldValues({});
     } else if (pendingAction.type === 'delete') {
       onDeleteEntry(pendingAction.data);
     }
@@ -142,6 +160,7 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
     setFiles(ent.files.toString());
     setPages(ent.pages.toString());
     setNotes(ent.notes || '');
+    setCustomFieldValues(ent.customFieldValues || {});
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -356,6 +375,38 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
             />
           </div>
 
+          {/* Dynamic Custom Management System (CMS) Fields for Selected Project */}
+          {currentProject?.customFields && currentProject.customFields.length > 0 && (
+            <div className="md:col-span-2 lg:col-span-3 space-y-4 pt-4 border-t border-slate-800">
+              <div className="flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <h4 className={`text-xs font-bold uppercase tracking-wider text-emerald-400`}>
+                  Project Custom Fields ({currentProject.customFields.length})
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {currentProject.customFields.map((field) => (
+                  <div key={field.id}>
+                    <label className={`block text-xs font-semibold uppercase mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {field.label} {field.required && <span className="text-rose-400">*</span>}
+                    </label>
+                    <input
+                      type={field.type}
+                      required={field.required}
+                      value={customFieldValues[field.id] ?? ''}
+                      onChange={(e) => setCustomFieldValues({
+                        ...customFieldValues,
+                        [field.id]: field.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value
+                      })}
+                      placeholder={`Enter ${field.label}`}
+                      className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${darkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-end">
             <button
               type="submit"
@@ -505,6 +556,25 @@ export const DailyEntryView: React.FC<DailyEntryViewProps> = ({
                 <span className={darkMode ? 'text-slate-400' : 'text-slate-600'}>Notes:</span>
                 <span className={darkMode ? 'text-slate-300' : 'text-slate-800'}>{viewingEntry.notes || 'None'}</span>
               </div>
+
+              {viewingEntry.customFieldValues && Object.keys(viewingEntry.customFieldValues).length > 0 && (
+                <div className="pt-3 mt-3 border-t border-slate-800 space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Custom CMS Fields</span>
+                  {(() => {
+                    const entProj = projects.find((p) => p.id === viewingEntry.projectId);
+                    return Object.entries(viewingEntry.customFieldValues).map(([cfId, val]) => {
+                      const cfDef = entProj?.customFields?.find((f) => f.id === cfId);
+                      const label = cfDef?.label || cfId;
+                      return (
+                        <div key={cfId} className="flex justify-between text-xs">
+                          <span className={darkMode ? 'text-slate-400' : 'text-slate-600'}>{label}:</span>
+                          <span className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{String(val) || '—'}</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
             </div>
             <div className="mt-6 flex justify-end">
               <button

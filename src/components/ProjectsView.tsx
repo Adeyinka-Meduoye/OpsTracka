@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Project, Operation } from '../types';
-import { Plus, Trash2, Edit, Eye, FolderKanban, ArrowRight, X, Check } from 'lucide-react';
+import { Project, Operation, CustomField } from '../types';
+import { Plus, Trash2, Edit, Eye, FolderKanban, ArrowRight, X, Check, Sliders } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 
 interface ProjectsViewProps {
@@ -31,14 +31,23 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     { id: 'op-3', name: 'Repackaging', description: 'Put physical documents back together in correct order and return to storage.', order: 3 },
   ]);
 
-  // Operation Modal State (Pop-up modal for adding / editing operations)
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+
+  // Operation Modal State
   const [isOperationModalOpen, setIsOperationModalOpen] = useState(false);
   const [editingOperation, setEditingOperation] = useState<Operation | null>(null);
   const [opModalName, setOpModalName] = useState('');
   const [opModalDesc, setOpModalDesc] = useState('');
 
+  // Custom Field Modal State (CMS)
+  const [isCustomFieldModalOpen, setIsCustomFieldModalOpen] = useState(false);
+  const [editingCustomField, setEditingCustomField] = useState<CustomField | null>(null);
+  const [cfLabel, setCfLabel] = useState('');
+  const [cfType, setCfType] = useState<'text' | 'number'>('text');
+  const [cfRequired, setCfRequired] = useState(false);
+
   const [pendingAction, setPendingAction] = useState<{
-    type: 'create' | 'update' | 'delete' | 'view';
+    type: 'create' | 'update' | 'delete' | 'delete_operation' | 'delete_custom_field' | 'view';
     title: string;
     message: string;
     isDanger?: boolean;
@@ -57,15 +66,17 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       { id: 'op-2', name: 'Scanning', description: 'Scan the documents and convert them into PDFs.', order: 2 },
       { id: 'op-3', name: 'Repackaging', description: 'Put physical documents back together in correct order and return to storage.', order: 3 },
     ]);
+    setCustomFields([]);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (proj: Project) => {
     setEditingProject(proj);
-    setName(proj.name);
-    setClient(proj.client);
-    setDescription(proj.description);
+    setName(proj.name || '');
+    setClient(proj.client || '');
+    setDescription(proj.description || '');
     setOperations(proj.operations || []);
+    setCustomFields(proj.customFields || []);
     setIsModalOpen(true);
   };
 
@@ -79,7 +90,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const handleOpenEditOperationModal = (op: Operation) => {
     setEditingOperation(op);
     setOpModalName(op.name);
-    setOpModalDesc(op.description);
+    setOpModalDesc(op.description || '');
     setIsOperationModalOpen(true);
   };
 
@@ -88,7 +99,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     if (!opModalName.trim()) return;
 
     if (editingOperation) {
-      // Update existing operation
       setOperations(
         operations.map((o) =>
           o.id === editingOperation.id
@@ -97,7 +107,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         )
       );
     } else {
-      // Add new operation
       const newOp: Operation = {
         id: `op-${Date.now()}`,
         name: opModalName.trim(),
@@ -107,6 +116,46 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       setOperations([...operations, newOp]);
     }
     setIsOperationModalOpen(false);
+  };
+
+  const handleOpenAddCustomField = () => {
+    setEditingCustomField(null);
+    setCfLabel('');
+    setCfType('text');
+    setCfRequired(false);
+    setIsCustomFieldModalOpen(true);
+  };
+
+  const handleOpenEditCustomField = (cf: CustomField) => {
+    setEditingCustomField(cf);
+    setCfLabel(cf.label);
+    setCfType(cf.type);
+    setCfRequired(!!cf.required);
+    setIsCustomFieldModalOpen(true);
+  };
+
+  const handleSaveCustomField = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cfLabel.trim()) return;
+
+    if (editingCustomField) {
+      setCustomFields(
+        customFields.map((f) =>
+          f.id === editingCustomField.id
+            ? { ...f, label: cfLabel.trim(), type: cfType, required: cfRequired }
+            : f
+        )
+      );
+    } else {
+      const newField: CustomField = {
+        id: `cf-${Date.now()}`,
+        label: cfLabel.trim(),
+        type: cfType,
+        required: cfRequired,
+      };
+      setCustomFields([...customFields, newField]);
+    }
+    setIsCustomFieldModalOpen(false);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -119,13 +168,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       client: client.trim(),
       description: description.trim(),
       operations,
+      customFields,
       createdAt: editingProject ? editingProject.createdAt : new Date().toISOString().split('T')[0],
     };
 
     setPendingAction({
       type: editingProject ? 'update' : 'create',
       title: editingProject ? 'Confirm Project Update' : 'Confirm Project Creation',
-      message: `Are you sure you want to ${editingProject ? 'update' : 'create'} the digitization project "${proj.name}" with ${operations.length} configured operations?`,
+      message: `Are you sure you want to ${editingProject ? 'update' : 'create'} the digitization project "${proj.name}" with ${operations.length} operations and ${customFields.length} custom CMS fields?`,
       data: proj,
     });
   };
@@ -232,6 +282,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     <span className={`text-[10px] ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>Configured</span>
                   </div>
                 ))}
+
+                {proj.customFields && proj.customFields.length > 0 && (
+                  <div className="pt-2 mt-2 border-t border-slate-800/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-emerald-400">
+                      CMS Custom Fields ({proj.customFields.length})
+                    </span>
+                    {proj.customFields.map((cf) => (
+                      <div key={cf.id} className="text-[11px] flex items-center justify-between text-slate-400">
+                        <span>• {cf.label}</span>
+                        <span className="font-mono text-[9px] bg-slate-900 px-1.5 py-0.5 rounded">{cf.type}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -335,7 +399,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             type="button"
                             onClick={() => {
                               setPendingAction({
-                                type: 'delete',
+                                type: 'delete_operation',
                                 title: 'Confirm Operation Deletion',
                                 message: `Are you sure you want to remove operation "${op.name}" from this project?`,
                                 isDanger: true,
@@ -352,6 +416,75 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Custom Management System (CMS) - Additional Project Fields */}
+              <div className="space-y-3 pt-4 border-t border-slate-800">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                    <Sliders className="w-4 h-4 text-emerald-400" />
+                    <label className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-slate-300' : 'text-slate-800'}`}>
+                      Custom Management System (CMS) Fields ({customFields.length})
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddCustomField}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Custom Field</span>
+                  </button>
+                </div>
+                <p className={`text-[11px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Add custom input fields (e.g. "Client Number", "Batch ID") that will automatically appear in the Daily Shift Output form for this project.
+                </p>
+
+                {customFields.length > 0 ? (
+                  <div className={`p-4 rounded-2xl border space-y-3 ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    {customFields.map((cf) => (
+                      <div key={cf.id} className={`p-3 rounded-xl border flex justify-between items-center ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-emerald-400">{cf.label}</span>
+                            <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded uppercase font-mono">{cf.type}</span>
+                            {cf.required && <span className="text-[10px] bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded font-semibold">Required</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditCustomField(cf)}
+                            className={`p-1.5 rounded-lg text-xs transition-colors ${darkMode ? 'text-slate-400 hover:text-amber-400 hover:bg-slate-800' : 'text-slate-600 hover:text-amber-600 hover:bg-slate-100'}`}
+                            title="Edit Field"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPendingAction({
+                                type: 'delete_custom_field',
+                                title: 'Confirm Custom Field Deletion',
+                                message: `Are you sure you want to delete the custom field "${cf.label}" (${cf.type})?`,
+                                isDanger: true,
+                                data: cf.id,
+                              });
+                            }}
+                            className={`p-1.5 rounded-lg text-xs transition-colors ${darkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-slate-800' : 'text-slate-600 hover:text-rose-600 hover:bg-slate-100'}`}
+                            title="Delete Field"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`p-4 rounded-2xl border text-center text-xs ${darkMode ? 'bg-slate-950/50 border-slate-800/50 text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
+                    No custom CMS fields added yet. Click "Add Custom Field" to add extra inputs.
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex justify-end space-x-3">
@@ -432,10 +565,82 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         </div>
       )}
 
+      {/* Custom Field Add / Update Modal Popup */}
+      {isCustomFieldModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'} border rounded-3xl max-w-md w-full p-8 relative`}>
+            <button
+              onClick={() => setIsCustomFieldModalOpen(false)}
+              className={`absolute top-5 right-5 p-2 rounded-xl ${darkMode ? 'text-slate-400 hover:text-white bg-slate-800' : 'text-slate-600 hover:text-slate-900 bg-slate-100'}`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className={`text-xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+              {editingCustomField ? 'Edit Custom CMS Field' : 'Add Custom CMS Field'}
+            </h3>
+
+            <form onSubmit={handleSaveCustomField} className="space-y-4">
+              <div>
+                <label className={`block text-xs font-semibold uppercase mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Field Label / Name</label>
+                <input
+                  type="text"
+                  required
+                  value={cfLabel}
+                  onChange={(e) => setCfLabel(e.target.value)}
+                  placeholder="e.g. Client Number or Batch ID"
+                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${darkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'}`}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-xs font-semibold uppercase mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Field Input Type</label>
+                <select
+                  value={cfType}
+                  onChange={(e) => setCfType(e.target.value as 'text' | 'number')}
+                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${darkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'}`}
+                >
+                  <option value="text">Text (Alphanumeric)</option>
+                  <option value="number">Number</option>
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="cfRequiredCheckbox"
+                  checked={cfRequired}
+                  onChange={(e) => setCfRequired(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-950 border-slate-800"
+                />
+                <label htmlFor="cfRequiredCheckbox" className={`text-xs font-medium cursor-pointer ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                  Make this field required in Daily Shift Output form
+                </label>
+              </div>
+
+              <div className="pt-4 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomFieldModalOpen(false)}
+                  className={`px-5 py-2.5 rounded-xl border text-sm font-medium ${darkMode ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow"
+                >
+                  {editingCustomField ? 'Save Field' : 'Add Field'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* View Project Details Modal */}
       {viewingProject && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'} border rounded-3xl max-w-lg w-full p-8 relative`}>
+          <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'} border rounded-3xl max-w-lg w-full p-8 relative max-h-[90vh] overflow-y-auto`}>
             <button
               onClick={() => setViewingProject(null)}
               className={`absolute top-5 right-5 p-2 rounded-xl ${darkMode ? 'text-slate-400 hover:text-white bg-slate-800' : 'text-slate-600 hover:text-slate-900 bg-slate-100'}`}
@@ -460,6 +665,21 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               ))}
             </div>
 
+            {viewingProject.customFields && viewingProject.customFields.length > 0 && (
+              <div className={`space-y-3 p-4 rounded-2xl border mb-6 ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                <h4 className={`text-xs font-bold uppercase tracking-wider text-emerald-400`}>Custom Management System (CMS) Fields</h4>
+                {viewingProject.customFields.map((cf) => (
+                  <div key={cf.id} className={`text-xs flex items-center justify-between border-b pb-2 last:border-none ${darkMode ? 'text-slate-300 border-slate-800/60' : 'text-slate-700 border-slate-200'}`}>
+                    <span className="font-medium">{cf.label}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 uppercase">{cf.type}</span>
+                      {cf.required && <span className="text-[10px] bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded font-semibold">Required</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex justify-end">
               <button
                 onClick={() => setViewingProject(null)}
@@ -477,11 +697,13 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         isOpen={!!pendingAction && pendingAction.type !== 'view'}
         title={pendingAction?.title || ''}
         message={pendingAction?.message || ''}
-        confirmText={pendingAction?.type === 'delete' ? 'Delete' : 'Confirm'}
+        confirmText={pendingAction?.type?.startsWith('delete') ? 'Delete' : 'Confirm'}
         isDanger={pendingAction?.isDanger}
         onConfirm={() => {
-          if (pendingAction?.type === 'delete' && pendingAction.data && typeof pendingAction.data === 'string' && pendingAction.data.startsWith('op-')) {
-            // It's an operation deletion
+          if (pendingAction?.type === 'delete_custom_field') {
+            setCustomFields(customFields.filter((f) => f.id !== pendingAction.data));
+            setPendingAction(null);
+          } else if (pendingAction?.type === 'delete_operation') {
             setOperations(operations.filter((o) => o.id !== pendingAction.data));
             setPendingAction(null);
           } else {
