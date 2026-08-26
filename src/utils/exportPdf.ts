@@ -8,7 +8,22 @@ export const exportEntriesToPDF = (
   filterTitle: string,
   targetDate?: string
 ) => {
-  const doc = new jsPDF();
+  // Collect all unique custom field labels across projects referenced in entries
+  const customFieldMap = new Map<string, string>(); // cfId -> label
+  for (const ent of entries) {
+    const proj = projects.find((p) => p.id === ent.projectId);
+    if (proj?.customFields) {
+      for (const cf of proj.customFields) {
+        customFieldMap.set(cf.id, cf.label);
+      }
+    }
+  }
+
+  const customFieldEntries = Array.from(customFieldMap.entries()); // [ [id, label], ... ]
+
+  // Use landscape if custom fields are present for optimal table layout
+  const orientation = customFieldEntries.length > 0 ? 'landscape' : 'portrait';
+  const doc = new jsPDF(orientation);
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header background banner
@@ -36,21 +51,29 @@ export const exportEntriesToPDF = (
   const totalFiles = entries.reduce((a, b) => a + b.files, 0);
   const totalPages = entries.reduce((a, b) => a + b.pages, 0);
 
+  const startMetricsY = targetDate ? 58 : 52;
   doc.setFillColor(241, 245, 249); // Slate-100
-  doc.roundedRect(14, 58, pageWidth - 28, 20, 3, 3, 'F');
+  doc.roundedRect(14, startMetricsY, pageWidth - 28, 18, 3, 3, 'F');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text(`Total Boxes: ${totalBoxes}`, 20, 71);
-  doc.text(`Total Files: ${totalFiles}`, 80, 71);
-  doc.text(`Total Pages: ${totalPages.toLocaleString()}`, 140, 71);
+  doc.text(`Total Boxes: ${totalBoxes}`, 20, startMetricsY + 11);
+  doc.text(`Total Files: ${totalFiles}`, 80, startMetricsY + 11);
+  doc.text(`Total Pages: ${totalPages.toLocaleString()}`, 140, startMetricsY + 11);
+  if (customFieldEntries.length > 0) {
+    doc.text(`Custom CMS Fields: ${customFieldEntries.length} column(s)`, 200, startMetricsY + 11);
+  }
 
   // Table Data
-  const tableColumn = ['Date', 'Staff', 'Project', 'Operation', 'Boxes', 'Files', 'Pages'];
+  const baseHeaders = ['Date', 'Staff', 'Project', 'Operation', 'Boxes', 'Files', 'Pages'];
+  const cfHeaders = customFieldEntries.map(([_, label]) => label);
+  const tableColumn = [...baseHeaders, ...cfHeaders];
+
   const tableRows = entries.map((e) => {
     const proj = projects.find((p) => p.id === e.projectId);
     const op = proj?.operations?.find((o) => o.id === e.operationId);
-    return [
+    
+    const baseRow = [
       e.date,
       e.staffName,
       proj?.name || 'Project',
@@ -59,10 +82,17 @@ export const exportEntriesToPDF = (
       e.files,
       e.pages.toLocaleString(),
     ];
+
+    const cfValues = customFieldEntries.map(([cfId]) => {
+      const val = e.customFieldValues?.[cfId];
+      return val !== undefined && val !== null && val !== '' ? String(val) : '—';
+    });
+
+    return [...baseRow, ...cfValues];
   });
 
   autoTable(doc, {
-    startY: 85,
+    startY: startMetricsY + 24,
     head: [tableColumn],
     body: tableRows,
     theme: 'grid',
@@ -70,7 +100,7 @@ export const exportEntriesToPDF = (
       fillColor: [16, 185, 129],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
+      fontSize: 8.5,
     },
     bodyStyles: {
       fontSize: 8,
@@ -78,6 +108,10 @@ export const exportEntriesToPDF = (
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
+    },
+    styles: {
+      overflow: 'linebreak',
+      cellPadding: 2.5,
     },
   });
 
@@ -97,3 +131,4 @@ export const exportEntriesToPDF = (
 
   doc.save(`opstracka_report_${targetDate || 'all_time'}.pdf`);
 };
+

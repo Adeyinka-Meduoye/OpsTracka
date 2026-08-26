@@ -114,9 +114,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     const filterDesc = selectedProjectId === 'all' ? 'All Projects' : currentProject?.name || 'Selected Project';
 
+    // Collect all unique custom field labels across projects referenced in entries
+    const customFieldMap = new Map<string, string>(); // cfId -> label
+    for (const ent of filteredEntries) {
+      const proj = projects.find((p) => p.id === ent.projectId);
+      if (proj?.customFields) {
+        for (const cf of proj.customFields) {
+          customFieldMap.set(cf.id, cf.label);
+        }
+      }
+    }
+    const customFieldEntries = Array.from(customFieldMap.entries());
+
     const rowsHtml = filteredEntries.map((e) => {
       const proj = projects.find((p) => p.id === e.projectId);
       const op = proj?.operations?.find((o) => o.id === e.operationId);
+
+      const cfCells = customFieldEntries.map(([cfId]) => {
+        const val = e.customFieldValues?.[cfId];
+        const displayVal = val !== undefined && val !== null && val !== '' ? String(val) : '—';
+        return `<td style="padding: 8px; border-bottom: 1px solid #cbd5e1;">${displayVal}</td>`;
+      }).join('');
+
       return `
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #cbd5e1;">${e.date}</td>
@@ -126,9 +145,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <td style="padding: 8px; border-bottom: 1px solid #cbd5e1; text-align: right;">${e.boxes}</td>
           <td style="padding: 8px; border-bottom: 1px solid #cbd5e1; text-align: right;">${e.files}</td>
           <td style="padding: 8px; border-bottom: 1px solid #cbd5e1; text-align: right;">${e.pages.toLocaleString()}</td>
+          ${cfCells}
         </tr>
       `;
     }).join('');
+
+    const cfHeaders = customFieldEntries.map(([_, label]) => `<th style="padding: 8px; text-align: left;">${label}</th>`).join('');
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -139,12 +161,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             body { font-family: sans-serif; padding: 24px; color: #0f172a; }
             h1 { color: #059669; font-size: 20px; margin-bottom: 4px; }
             .meta { font-size: 12px; color: #475569; margin-bottom: 16px; }
-            .metrics { display: flex; gap: 16px; margin-bottom: 20px; }
-            .metric-card { background: #f1f5f9; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; }
+            .metrics { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+            .metric-card { background: #f1f5f9; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; min-width: 100px; }
             .metric-card h3 { margin: 0; font-size: 18px; color: #0f172a; }
             .metric-card span { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 11px; }
-            th { background: #059669; color: white; text-align: left; padding: 8px; }
+            th { background: #059669; color: white; text-align: left; padding: 8px; font-weight: 600; }
+            @media print {
+              @page { size: landscape; margin: 10mm; }
+            }
           </style>
         </head>
         <body>
@@ -167,17 +192,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Pages</span>
               <h3>${totalPages.toLocaleString()}</h3>
             </div>
+            ${customFieldEntries.length > 0 ? `
+              <div class="metric-card">
+                <span>Custom CMS Fields</span>
+                <h3>${customFieldEntries.length}</h3>
+              </div>
+            ` : ''}
           </div>
           <table>
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Team Member / Staff</th>
-                <th>Project</th>
-                <th>Operation</th>
-                <th style="text-align: right;">Boxes</th>
-                <th style="text-align: right;">Files</th>
-                <th style="text-align: right;">Pages</th>
+                <th style="padding: 8px; text-align: left;">Date</th>
+                <th style="padding: 8px; text-align: left;">Team Member / Staff</th>
+                <th style="padding: 8px; text-align: left;">Project</th>
+                <th style="padding: 8px; text-align: left;">Operation</th>
+                <th style="padding: 8px; text-align: right;">Boxes</th>
+                <th style="padding: 8px; text-align: right;">Files</th>
+                <th style="padding: 8px; text-align: right;">Pages</th>
+                ${cfHeaders}
               </tr>
             </thead>
             <tbody>
