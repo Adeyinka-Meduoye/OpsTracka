@@ -17,7 +17,7 @@ export const Footer: React.FC<FooterProps> = ({ darkMode, onOpenAbout }) => {
           <span className="hidden sm:inline">·</span>
           <button
             onClick={onOpenAbout}
-            className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center space-x-1 transition-colors underline"
+            className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center space-x-1 transition-colors"
           >
             <Info className="w-3.5 h-3.5" />
             <span>About OpsTracka</span>
