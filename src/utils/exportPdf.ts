@@ -26,6 +26,7 @@ export const exportEntriesToPDF = (
   // Landscape orientation provides optimal width for metrics, charts, and multi-column tables
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
 
   // Header background banner
   doc.setFillColor(16, 185, 129); // Emerald-500
@@ -65,25 +66,9 @@ export const exportEntriesToPDF = (
     doc.text(`Custom CMS Fields: ${customFieldEntries.length} column(s)`, 190, startMetricsY + 10.5);
   }
 
-  let nextContentY = startMetricsY + 22;
+  const tableStartY = startMetricsY + 22;
 
-  // Render & Embed Performance Analytics Chart if chartData is provided
-  if (chartData && chartData.length > 0) {
-    try {
-      const chartTitle = `Performance Analytics Chart (${filterTitle})`;
-      const chartDataUrl = generateChartDataUrl(chartData, chartTitle);
-      
-      const chartWidth = pageWidth - 28;
-      const chartHeight = 72; // in mm
-      
-      doc.addImage(chartDataUrl, 'PNG', 14, nextContentY, chartWidth, chartHeight);
-      nextContentY += chartHeight + 8;
-    } catch (err) {
-      console.warn('Error embedding chart in PDF:', err);
-    }
-  }
-
-  // Table Data
+  // 1. Table Data FIRST
   const baseHeaders = ['Date', 'Staff', 'Project', 'Operation', 'Boxes', 'Files', 'Pages'];
   const cfHeaders = customFieldEntries.map(([_, label]) => label);
   const tableColumn = [...baseHeaders, ...cfHeaders];
@@ -111,7 +96,7 @@ export const exportEntriesToPDF = (
   });
 
   autoTable(doc, {
-    startY: nextContentY,
+    startY: tableStartY,
     head: [tableColumn],
     body: tableRows,
     theme: 'grid',
@@ -134,7 +119,29 @@ export const exportEntriesToPDF = (
     },
   });
 
-  // Footer
+  // 2. Render & Embed Performance Analytics Chart AFTER Table
+  if (chartData && chartData.length > 0) {
+    try {
+      const chartTitle = `Performance Analytics Chart (${filterTitle})`;
+      const chartDataUrl = generateChartDataUrl(chartData, chartTitle);
+      
+      const chartWidth = pageWidth - 28;
+      const chartHeight = 84; // in mm
+      const finalTableY = (doc as any).lastAutoTable?.finalY || tableStartY + 50;
+
+      // If remaining height on current page is not enough for chart + margin + footer, create new page
+      if (finalTableY + chartHeight + 20 > pageHeight) {
+        doc.addPage();
+        doc.addImage(chartDataUrl, 'PNG', 14, 18, chartWidth, chartHeight);
+      } else {
+        doc.addImage(chartDataUrl, 'PNG', 14, finalTableY + 12, chartWidth, chartHeight);
+      }
+    } catch (err) {
+      console.warn('Error embedding chart in PDF:', err);
+    }
+  }
+
+  // Footer (applied to all generated pages)
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);

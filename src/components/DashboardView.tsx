@@ -208,12 +208,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ` : ''}
           </div>
 
-          ${chartDataUrl ? `
-            <div class="chart-box">
-              <img src="${chartDataUrl}" alt="Operations Analytics Chart" />
-            </div>
-          ` : ''}
-
           <table>
             <thead>
               <tr>
@@ -231,6 +225,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ${rowsHtml}
             </tbody>
           </table>
+
+          ${chartDataUrl ? `
+            <div class="chart-box" style="margin-top: 24px;">
+              <img src="${chartDataUrl}" alt="Operations Analytics Chart" />
+            </div>
+          ` : ''}
           <script>
             window.onload = function() {
               window.print();

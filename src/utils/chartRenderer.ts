@@ -7,15 +7,39 @@ export interface ChartDataItem {
 }
 
 /**
+ * Helper function to wrap text onto multiple lines without truncating.
+ */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  if (!text) return [];
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
+/**
  * Generates a high-resolution 2x retina Canvas PNG Data URL representing the bar chart
  * for inclusion in PDF exports, print windows, and report documents.
+ * Completely spells out full Project Names and Operation names without truncation or ellipses.
  */
 export const generateChartDataUrl = (
   data: ChartDataItem[],
   title = 'Output Volume Performance Chart'
 ): string => {
   if (!data || data.length === 0) {
-    // Return empty fallback
     const emptyCanvas = document.createElement('canvas');
     emptyCanvas.width = 800;
     emptyCanvas.height = 300;
@@ -31,8 +55,9 @@ export const generateChartDataUrl = (
     return emptyCanvas.toDataURL('image/png');
   }
 
-  const width = 900;
-  const height = 380;
+  const width = 960;
+  // Extra bottom room to comfortably accommodate completely spelled out project and operation names
+  const height = 430;
   const canvas = document.createElement('canvas');
   canvas.width = width * 2; // 2x retina
   canvas.height = height * 2;
@@ -46,19 +71,19 @@ export const generateChartDataUrl = (
   ctx.fillRect(0, 0, width, height);
 
   // Card outline
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = '#cbd5e1';
   ctx.lineWidth = 1;
   ctx.strokeRect(0, 0, width, height);
 
   // Title
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = 'bold 15px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(title, 24, 32);
+  ctx.fillText(title, 20, 28);
 
   // Legend (Top Right)
-  const legendX = width - 360;
-  const legendY = 24;
+  const legendX = width - 370;
+  const legendY = 22;
 
   // Pages Legend (Emerald)
   ctx.fillStyle = '#10b981';
@@ -66,7 +91,7 @@ export const generateChartDataUrl = (
   ctx.arc(legendX, legendY, 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#334155';
-  ctx.font = '500 12px sans-serif';
+  ctx.font = '500 11px sans-serif';
   ctx.fillText('Pages Digitized', legendX + 10, legendY + 4);
 
   // Files Legend (Blue)
@@ -88,10 +113,10 @@ export const generateChartDataUrl = (
   ctx.fillText('Boxes', legendX3 + 10, legendY + 4);
 
   // Chart plotting boundaries
-  const plotLeft = 70;
-  const plotRight = width - 30;
-  const plotTop = 60;
-  const plotBottom = height - 60;
+  const plotLeft = 65;
+  const plotRight = width - 25;
+  const plotTop = 50;
+  const plotBottom = height - 105; // Plentiful bottom space for full project names
   const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - plotTop;
 
@@ -101,7 +126,7 @@ export const generateChartDataUrl = (
   const maxBoxes = Math.max(...data.map((d) => d.boxes), 0);
   const rawMax = Math.max(maxPages, maxFiles, maxBoxes, 10);
 
-  // Round up to nice number
+  // Round up to nice scale
   const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)));
   const yMax = Math.ceil(rawMax / magnitude) * magnitude || 10;
 
@@ -109,7 +134,7 @@ export const generateChartDataUrl = (
   const gridSteps = 5;
   ctx.strokeStyle = '#f1f5f9';
   ctx.lineWidth = 1;
-  ctx.font = '11px sans-serif';
+  ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
 
   for (let i = 0; i <= gridSteps; i++) {
@@ -124,10 +149,10 @@ export const generateChartDataUrl = (
 
     // Y Axis label
     ctx.fillStyle = '#64748b';
-    ctx.fillText(val >= 1000 ? `${(val / 1000).toFixed(1)}k` : `${val}`, plotLeft - 10, yPos + 4);
+    ctx.fillText(val >= 1000 ? `${(val / 1000).toFixed(1)}k` : `${val}`, plotLeft - 8, yPos + 3.5);
   }
 
-  // Draw X-axis line
+  // Draw X-axis baseline
   ctx.strokeStyle = '#cbd5e1';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -138,9 +163,9 @@ export const generateChartDataUrl = (
   // Draw Bars for each data item
   const groupCount = data.length;
   const groupWidth = plotWidth / groupCount;
-  const barPadding = Math.max(4, groupWidth * 0.15);
+  const barPadding = Math.max(4, groupWidth * 0.12);
   const availableBarSpace = groupWidth - barPadding * 2;
-  const barWidth = Math.min(28, availableBarSpace / 3);
+  const barWidth = Math.min(26, availableBarSpace / 3);
 
   data.forEach((item, index) => {
     const groupCenterX = plotLeft + index * groupWidth + groupWidth / 2;
@@ -157,18 +182,18 @@ export const generateChartDataUrl = (
     if (item.pages > 0) {
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
-      ctx.roundRect(xPages, plotBottom - barPagesHeight, barWidth - 2, barPagesHeight, [3, 3, 0, 0]);
+      ctx.roundRect(xPages, plotBottom - barPagesHeight, barWidth - 1.5, barPagesHeight, [3, 3, 0, 0]);
       ctx.fill();
 
       // Value label on top
-      if (barWidth >= 16) {
+      if (barWidth >= 14) {
         ctx.fillStyle = '#065f46';
-        ctx.font = 'bold 9px sans-serif';
+        ctx.font = 'bold 8.5px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(
           item.pages >= 1000 ? `${Math.round(item.pages / 1000)}k` : `${item.pages}`,
-          xPages + (barWidth - 2) / 2,
-          plotBottom - barPagesHeight - 4
+          xPages + (barWidth - 1.5) / 2,
+          plotBottom - barPagesHeight - 3
         );
       }
     }
@@ -177,17 +202,17 @@ export const generateChartDataUrl = (
     if (item.files > 0) {
       ctx.fillStyle = '#3b82f6';
       ctx.beginPath();
-      ctx.roundRect(xFiles, plotBottom - barFilesHeight, barWidth - 2, barFilesHeight, [3, 3, 0, 0]);
+      ctx.roundRect(xFiles, plotBottom - barFilesHeight, barWidth - 1.5, barFilesHeight, [3, 3, 0, 0]);
       ctx.fill();
 
-      if (barWidth >= 16) {
+      if (barWidth >= 14) {
         ctx.fillStyle = '#1e40af';
-        ctx.font = 'bold 9px sans-serif';
+        ctx.font = 'bold 8.5px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(
           item.files >= 1000 ? `${Math.round(item.files / 1000)}k` : `${item.files}`,
-          xFiles + (barWidth - 2) / 2,
-          plotBottom - barFilesHeight - 4
+          xFiles + (barWidth - 1.5) / 2,
+          plotBottom - barFilesHeight - 3
         );
       }
     }
@@ -196,34 +221,45 @@ export const generateChartDataUrl = (
     if (item.boxes > 0) {
       ctx.fillStyle = '#f59e0b';
       ctx.beginPath();
-      ctx.roundRect(xBoxes, plotBottom - barBoxesHeight, barWidth - 2, barBoxesHeight, [3, 3, 0, 0]);
+      ctx.roundRect(xBoxes, plotBottom - barBoxesHeight, barWidth - 1.5, barBoxesHeight, [3, 3, 0, 0]);
       ctx.fill();
 
-      if (barWidth >= 16) {
+      if (barWidth >= 14) {
         ctx.fillStyle = '#92400e';
-        ctx.font = 'bold 9px sans-serif';
+        ctx.font = 'bold 8.5px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(
           `${item.boxes}`,
-          xBoxes + (barWidth - 2) / 2,
-          plotBottom - barBoxesHeight - 4
+          xBoxes + (barWidth - 1.5) / 2,
+          plotBottom - barBoxesHeight - 3
         );
       }
     }
 
-    // X Axis Label
-    ctx.fillStyle = '#1e293b';
-    ctx.font = '600 10px sans-serif';
+    // X Axis Label: Completely spelled out (no truncation, wrapped cleanly if needed)
+    const maxTextWidth = Math.max(60, groupWidth - 4);
+    let labelY = plotBottom + 14;
+
+    // Operation / Category Name
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 9.5px sans-serif';
     ctx.textAlign = 'center';
+    const opLines = wrapText(ctx, item.name, maxTextWidth);
+    for (const line of opLines) {
+      ctx.fillText(line, groupCenterX, labelY);
+      labelY += 12;
+    }
 
-    const truncatedLabel = item.name.length > 14 ? `${item.name.substring(0, 12)}…` : item.name;
-    ctx.fillText(truncatedLabel, groupCenterX, plotBottom + 16);
-
-    if (item.projectName && item.projectName !== item.name) {
-      ctx.fillStyle = '#64748b';
-      ctx.font = '9px sans-serif';
-      const subLabel = item.projectName.length > 15 ? `${item.projectName.substring(0, 13)}…` : item.projectName;
-      ctx.fillText(subLabel, groupCenterX, plotBottom + 28);
+    // Full Project Name (Completely Spelled Out)
+    const fullProjectName = item.projectName || '';
+    if (fullProjectName && fullProjectName !== item.name) {
+      ctx.fillStyle = '#059669'; // Emerald-700
+      ctx.font = '600 8.5px sans-serif';
+      const projLines = wrapText(ctx, fullProjectName, maxTextWidth);
+      for (const line of projLines) {
+        ctx.fillText(line, groupCenterX, labelY);
+        labelY += 11;
+      }
     }
   });
 

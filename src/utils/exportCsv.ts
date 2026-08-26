@@ -35,25 +35,8 @@ export const exportEntriesToCSV = (
 
   const lines: string[] = [];
 
-  // 1. Chart Aggregation & Performance Summary Table (For Instant Spreadsheet Charting)
-  if (chartData && chartData.length > 0) {
-    lines.push('"=== CHART PERFORMANCE & AGGREGATED METRICS SUMMARY ==="');
-    lines.push('"Category / Stage","Project Name","Total Boxes Processed","Total Files Sorted","Total Pages Digitized","% Volume Share"');
-    
-    const totalPagesAll = chartData.reduce((acc, curr) => acc + curr.pages, 0) || 1;
-    
-    for (const item of chartData) {
-      const share = ((item.pages / totalPagesAll) * 100).toFixed(1) + '%';
-      lines.push(
-        `"${item.name.replace(/"/g, '""')}","${(item.projectName || item.name).replace(/"/g, '""')}",${item.boxes},${item.files},${item.pages},"${share}"`
-      );
-    }
-
-    lines.push(''); // Empty line separator
-    lines.push('"=== GRANULAR SHIFT ENTRIES LOG ==="');
-  }
-
-  // 2. Granular Operations Log
+  // 1. Granular Operations Log Table FIRST
+  lines.push('"=== GRANULAR SHIFT ENTRIES LOG ==="');
   const baseHeaders = ['Entry ID', 'Project', 'Operation', 'Date', 'Staff Name', 'Boxes', 'Files', 'Pages', 'Notes', 'Created At'];
   const cfHeaders = customFieldEntries.map(([_, label]) => label);
   const headers = [...baseHeaders, ...cfHeaders];
@@ -88,6 +71,23 @@ export const exportEntriesToCSV = (
   });
 
   lines.push(...rows);
+
+  // 2. Chart Aggregation & Performance Summary Table AFTER the Table
+  if (chartData && chartData.length > 0) {
+    lines.push(''); // Empty line separator
+    lines.push('"=== PERFORMANCE ANALYTICS & AGGREGATED METRICS SUMMARY ==="');
+    lines.push('"Operation / Stage","Project Name","Total Boxes Processed","Total Files Sorted","Total Pages Digitized","% Volume Share"');
+    
+    const totalPagesAll = chartData.reduce((acc, curr) => acc + curr.pages, 0) || 1;
+    
+    for (const item of chartData) {
+      const share = ((item.pages / totalPagesAll) * 100).toFixed(1) + '%';
+      const fullProjectName = item.projectName || item.name;
+      lines.push(
+        `"${item.name.replace(/"/g, '""')}","${fullProjectName.replace(/"/g, '""')}",${item.boxes},${item.files},${item.pages},"${share}"`
+      );
+    }
+  }
 
   // Prepend UTF-8 BOM (\uFEFF) so Excel opens CSV with correct encoding
   const csvContent = '\uFEFF' + lines.join('\n');
