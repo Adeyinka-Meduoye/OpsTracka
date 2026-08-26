@@ -1,5 +1,5 @@
 // Service Worker for OpsTracka PWA (Enterprise Production Ready)
-const CACHE_VERSION = 'opstracka-v4.1';
+const CACHE_VERSION = 'opstracka-v5.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Pre-cache static assets
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
@@ -41,6 +42,12 @@ self.addEventListener('message', (event) => {
 // Network-first for navigation requests to ensure fresh index.html, with offline cache fallback
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // Never cache version check file
+  if (event.request.url.includes('version.json')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => new Response('{}', { status: 200 })));
     return;
   }
 
