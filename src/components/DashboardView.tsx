@@ -4,6 +4,7 @@ import { LayoutDashboard, TrendingUp, Package, FileText, BookOpen, Shield, Filte
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { exportEntriesToCSV } from '../utils/exportCsv';
 import { exportEntriesToPDF } from '../utils/exportPdf';
+import { generateChartDataUrl } from '../utils/chartRenderer';
 
 interface DashboardViewProps {
   projects: Project[];
@@ -97,12 +98,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         });
 
   const handleExportCSV = () => {
-    exportEntriesToCSV(filteredEntries, projects, `filtered_operations_report_${targetDate || 'all_time'}.csv`);
+    exportEntriesToCSV(filteredEntries, projects, `filtered_operations_report_${targetDate || 'all_time'}.csv`, chartData);
   };
 
   const handleExportPDF = () => {
     const filterDesc = selectedProjectId === 'all' ? 'All Projects' : currentProject?.name || 'Selected Project';
-    exportEntriesToPDF(filteredEntries, projects, filterDesc, targetDate);
+    exportEntriesToPDF(filteredEntries, projects, filterDesc, targetDate, chartData);
   };
 
   const handlePrint = () => {
@@ -113,6 +114,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     const filterDesc = selectedProjectId === 'all' ? 'All Projects' : currentProject?.name || 'Selected Project';
+
+    // Generate chart data URL for high-resolution visual embedding in the print report
+    const chartTitle = `Performance Analytics Output Chart (${filterDesc})`;
+    const chartDataUrl = generateChartDataUrl(chartData, chartTitle);
 
     // Collect all unique custom field labels across projects referenced in entries
     const customFieldMap = new Map<string, string>(); // cfId -> label
@@ -158,22 +163,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <head>
           <title>OpsTracka - Operations Report</title>
           <style>
-            body { font-family: sans-serif; padding: 24px; color: #0f172a; }
+            body { font-family: sans-serif; padding: 24px; color: #0f172a; margin: 0; }
             h1 { color: #059669; font-size: 20px; margin-bottom: 4px; }
             .meta { font-size: 12px; color: #475569; margin-bottom: 16px; }
             .metrics { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
             .metric-card { background: #f1f5f9; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; min-width: 100px; }
             .metric-card h3 { margin: 0; font-size: 18px; color: #0f172a; }
             .metric-card span { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold; }
+            .chart-box { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 20px; text-align: center; page-break-inside: avoid; }
+            .chart-box img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 11px; }
             th { background: #059669; color: white; text-align: left; padding: 8px; font-weight: 600; }
             @media print {
               @page { size: landscape; margin: 10mm; }
+              .chart-box { border: 1px solid #94a3b8; }
             }
           </style>
         </head>
         <body>
-          <h1>OPSTRACKA - DIGITAL OPERATIONS REPORT</h1>
+          <h1>OPSTRACKA - DIGITAL OPERATIONS & ANALYTICS REPORT</h1>
           <div class="meta">
             <div><strong>Filter View:</strong> ${filterDesc}</div>
             <div><strong>Target Date:</strong> ${targetDate || 'All Time'}</div>
@@ -199,6 +207,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             ` : ''}
           </div>
+
+          ${chartDataUrl ? `
+            <div class="chart-box">
+              <img src="${chartDataUrl}" alt="Operations Analytics Chart" />
+            </div>
+          ` : ''}
+
           <table>
             <thead>
               <tr>

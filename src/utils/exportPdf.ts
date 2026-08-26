@@ -1,12 +1,14 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { StaffEntry, Project } from '../types';
+import { ChartDataItem, generateChartDataUrl } from './chartRenderer';
 
 export const exportEntriesToPDF = (
   entries: StaffEntry[],
   projects: Project[],
   filterTitle: string,
-  targetDate?: string
+  targetDate?: string,
+  chartData?: ChartDataItem[]
 ) => {
   // Collect all unique custom field labels across projects referenced in entries
   const customFieldMap = new Map<string, string>(); // cfId -> label
@@ -21,29 +23,28 @@ export const exportEntriesToPDF = (
 
   const customFieldEntries = Array.from(customFieldMap.entries()); // [ [id, label], ... ]
 
-  // Use landscape if custom fields are present for optimal table layout
-  const orientation = customFieldEntries.length > 0 ? 'landscape' : 'portrait';
-  const doc = new jsPDF(orientation);
+  // Landscape orientation provides optimal width for metrics, charts, and multi-column tables
+  const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header background banner
   doc.setFillColor(16, 185, 129); // Emerald-500
-  doc.rect(0, 0, pageWidth, 28, 'F');
+  doc.rect(0, 0, pageWidth, 26, 'F');
 
   // Title
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
-  doc.text('OPSTRACKA - DIGITAL OPERATIONS REPORT', 14, 18);
+  doc.text('OPSTRACKA - DIGITAL OPERATIONS & ANALYTICS REPORT', 14, 17);
 
   // Metadata
   doc.setTextColor(15, 23, 42); // Slate-900
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generated On: ${new Date().toLocaleString()}`, 14, 38);
-  doc.text(`Filter View: ${filterTitle}`, 14, 45);
+  doc.text(`Generated On: ${new Date().toLocaleString()}`, 14, 34);
+  doc.text(`Filter View: ${filterTitle}`, 14, 40);
   if (targetDate) {
-    doc.text(`Target Date: ${targetDate}`, 14, 52);
+    doc.text(`Target Date: ${targetDate}`, 14, 46);
   }
 
   // Summary Metrics
@@ -51,17 +52,35 @@ export const exportEntriesToPDF = (
   const totalFiles = entries.reduce((a, b) => a + b.files, 0);
   const totalPages = entries.reduce((a, b) => a + b.pages, 0);
 
-  const startMetricsY = targetDate ? 58 : 52;
+  const startMetricsY = targetDate ? 50 : 44;
   doc.setFillColor(241, 245, 249); // Slate-100
-  doc.roundedRect(14, startMetricsY, pageWidth - 28, 18, 3, 3, 'F');
+  doc.roundedRect(14, startMetricsY, pageWidth - 28, 16, 3, 3, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text(`Total Boxes: ${totalBoxes}`, 20, startMetricsY + 11);
-  doc.text(`Total Files: ${totalFiles}`, 80, startMetricsY + 11);
-  doc.text(`Total Pages: ${totalPages.toLocaleString()}`, 140, startMetricsY + 11);
+  doc.setFontSize(8.5);
+  doc.text(`Total Boxes: ${totalBoxes}`, 20, startMetricsY + 10.5);
+  doc.text(`Total Files: ${totalFiles}`, 75, startMetricsY + 10.5);
+  doc.text(`Total Pages: ${totalPages.toLocaleString()}`, 130, startMetricsY + 10.5);
   if (customFieldEntries.length > 0) {
-    doc.text(`Custom CMS Fields: ${customFieldEntries.length} column(s)`, 200, startMetricsY + 11);
+    doc.text(`Custom CMS Fields: ${customFieldEntries.length} column(s)`, 190, startMetricsY + 10.5);
+  }
+
+  let nextContentY = startMetricsY + 22;
+
+  // Render & Embed Performance Analytics Chart if chartData is provided
+  if (chartData && chartData.length > 0) {
+    try {
+      const chartTitle = `Performance Analytics Chart (${filterTitle})`;
+      const chartDataUrl = generateChartDataUrl(chartData, chartTitle);
+      
+      const chartWidth = pageWidth - 28;
+      const chartHeight = 72; // in mm
+      
+      doc.addImage(chartDataUrl, 'PNG', 14, nextContentY, chartWidth, chartHeight);
+      nextContentY += chartHeight + 8;
+    } catch (err) {
+      console.warn('Error embedding chart in PDF:', err);
+    }
   }
 
   // Table Data
@@ -92,7 +111,7 @@ export const exportEntriesToPDF = (
   });
 
   autoTable(doc, {
-    startY: startMetricsY + 24,
+    startY: nextContentY,
     head: [tableColumn],
     body: tableRows,
     theme: 'grid',
@@ -100,10 +119,10 @@ export const exportEntriesToPDF = (
       fillColor: [16, 185, 129],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 8.5,
+      fontSize: 8,
     },
     bodyStyles: {
-      fontSize: 8,
+      fontSize: 7.5,
       textColor: [15, 23, 42],
     },
     alternateRowStyles: {
@@ -111,7 +130,7 @@ export const exportEntriesToPDF = (
     },
     styles: {
       overflow: 'linebreak',
-      cellPadding: 2.5,
+      cellPadding: 2,
     },
   });
 
@@ -124,11 +143,10 @@ export const exportEntriesToPDF = (
     doc.text(
       `OpsTracka Enterprise Archival Digitization Report - Page ${i} of ${pageCount}`,
       pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 10,
+      doc.internal.pageSize.getHeight() - 8,
       { align: 'center' }
     );
   }
 
   doc.save(`opstracka_report_${targetDate || 'all_time'}.pdf`);
 };
-

@@ -1,8 +1,8 @@
 import { Project, StaffEntry } from '../types';
+import { ChartDataItem } from './chartRenderer';
 
 const formatDateToYMD = (dateInput: string) => {
   if (!dateInput) return '';
-  // If string contains ISO timestamp, take date part
   const datePart = dateInput.split('T')[0];
   const parsed = new Date(datePart);
   if (!isNaN(parsed.getTime())) {
@@ -14,7 +14,12 @@ const formatDateToYMD = (dateInput: string) => {
   return datePart;
 };
 
-export const exportEntriesToCSV = (entries: StaffEntry[], projects: Project[], filename = 'opstrack_report.csv') => {
+export const exportEntriesToCSV = (
+  entries: StaffEntry[],
+  projects: Project[],
+  filename = 'opstrack_report.csv',
+  chartData?: ChartDataItem[]
+) => {
   // Collect all unique custom field labels across projects referenced in entries
   const customFieldMap = new Map<string, string>(); // cfId -> label
   for (const ent of entries) {
@@ -28,10 +33,32 @@ export const exportEntriesToCSV = (entries: StaffEntry[], projects: Project[], f
 
   const customFieldEntries = Array.from(customFieldMap.entries()); // [ [id, label], ... ]
 
+  const lines: string[] = [];
+
+  // 1. Chart Aggregation & Performance Summary Table (For Instant Spreadsheet Charting)
+  if (chartData && chartData.length > 0) {
+    lines.push('"=== CHART PERFORMANCE & AGGREGATED METRICS SUMMARY ==="');
+    lines.push('"Category / Stage","Project Name","Total Boxes Processed","Total Files Sorted","Total Pages Digitized","% Volume Share"');
+    
+    const totalPagesAll = chartData.reduce((acc, curr) => acc + curr.pages, 0) || 1;
+    
+    for (const item of chartData) {
+      const share = ((item.pages / totalPagesAll) * 100).toFixed(1) + '%';
+      lines.push(
+        `"${item.name.replace(/"/g, '""')}","${(item.projectName || item.name).replace(/"/g, '""')}",${item.boxes},${item.files},${item.pages},"${share}"`
+      );
+    }
+
+    lines.push(''); // Empty line separator
+    lines.push('"=== GRANULAR SHIFT ENTRIES LOG ==="');
+  }
+
+  // 2. Granular Operations Log
   const baseHeaders = ['Entry ID', 'Project', 'Operation', 'Date', 'Staff Name', 'Boxes', 'Files', 'Pages', 'Notes', 'Created At'];
   const cfHeaders = customFieldEntries.map(([_, label]) => label);
   const headers = [...baseHeaders, ...cfHeaders];
-  
+  lines.push(headers.join(','));
+
   const rows = entries.map((ent) => {
     const proj = projects.find((p) => p.id === ent.projectId);
     const op = proj?.operations.find((o) => o.id === ent.operationId);
@@ -43,7 +70,7 @@ export const exportEntriesToCSV = (entries: StaffEntry[], projects: Project[], f
       `"${ent.id}"`,
       `"${proj?.name || 'Unknown Project'}"`,
       `"${op?.name || 'Unknown Operation'}"`,
-      `="\t${formattedDate}"`, // Force Excel to treat as text in YYYY-MM-DD format without ####### error
+      `="\t${formattedDate}"`, // Force Excel to treat as text in YYYY-MM-DD format
       `"${ent.staffName}"`,
       ent.boxes,
       ent.files,
@@ -57,11 +84,13 @@ export const exportEntriesToCSV = (entries: StaffEntry[], projects: Project[], f
       return `"${String(val).replace(/"/g, '""')}"`;
     });
 
-    return [...baseRow, ...cfValues];
+    return [...baseRow, ...cfValues].join(',');
   });
 
+  lines.push(...rows);
+
   // Prepend UTF-8 BOM (\uFEFF) so Excel opens CSV with correct encoding
-  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  const csvContent = '\uFEFF' + lines.join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
